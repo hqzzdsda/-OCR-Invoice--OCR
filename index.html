@@ -184,24 +184,27 @@
          */
         async function getWorker() {
   if (!state.ocr) {
-    setOCRMsg('加载本地语言包...');
+    setOCRMsg('加载语言包...');
 
     const worker = await Tesseract.createWorker({
       workerPath: 'https://unpkg.com/tesseract.js@5.0.3/dist/worker.min.js',
       corePath: 'https://unpkg.com/tesseract.js-core@5.0.0/tesseract.js-core.wasm.js',
-      langPath: 'https://hqzzdsda.github.io/-OCR-Invoice--OCR/tessdata',
-      logger: m => {
-        if (m.status === 'recognizing text') {
-          setOCRMsg(`正在解析: ${Math.round(m.progress * 100)}%`);
-        }
-      }
+      langPath: 'https://hqzzdsda.github.io/-OCR-Invoice--OCR/tessdata'
     });
 
+    // 加载中文语言
     await worker.loadLanguage('chi_sim');
     await worker.initialize('chi_sim');
 
+    // 发票优化参数（重要）
+    await worker.setParameters({
+      tessedit_pageseg_mode: 6,   // 适合票据版式
+      preserve_interword_spaces: '1'
+    });
+
     state.ocr = worker;
   }
+
   return state.ocr;
 }
 
@@ -386,6 +389,7 @@
     </script>
 </body>
 </html>
+
 
 
 
