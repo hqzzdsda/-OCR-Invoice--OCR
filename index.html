@@ -182,11 +182,11 @@
         /**
          * 1. OCR 引擎初始化 (GitHub Pages 路径兼容)
          */
-       async function getWorker() {
+      async function getWorker() {
   if (!state.ocr) {
-    setOCRMsg('加载 OCR 引擎…');
+    setOCRMsg('加载 OCR 引擎...');
 
-    const worker = Tesseract.createWorker({
+    const worker = await Tesseract.createWorker({
       langPath: './tessdata',
       logger: m => {
         if (m.status === 'recognizing text') {
@@ -195,7 +195,7 @@
       }
     });
 
-    await worker.load();
+    // v5 不需要 load()
     await worker.loadLanguage('chi_sim');
     await worker.initialize('chi_sim');
 
@@ -389,6 +389,7 @@
     </script>
 </body>
 </html>
+
 
 
 
