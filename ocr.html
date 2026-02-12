@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
+    <base href="./">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Privacy-First Invoice OCR | 隐私优先发票识别</title>
@@ -9,99 +10,90 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
-        body { font-family: 'Inter', -apple-system, sans-serif; }
-        .loading-ring {
-            border: 3px solid #f3f3f3; border-top: 3px solid #2563eb;
-            border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite;
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap');
+        body { font-family: 'Noto Sans SC', sans-serif; }
+        .loading-spin {
+            border: 3px solid #f3f3f3; border-top: 3px solid #3b82f6;
+            border-radius: 50%; width: 28px; height: 28px; animation: spin 1s linear infinite;
         }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        .invoice-card-active { border-left: 4px solid #2563eb; background: #f8fafc; }
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+        .active-file { border-left: 4px solid #3b82f6; background-color: #f0f7ff; }
+        .custom-scroll::-webkit-scrollbar { width: 5px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
     </style>
 </head>
-<body class="bg-gray-50 text-slate-900">
+<body class="bg-slate-50 text-slate-900 min-h-screen">
 
-    <nav class="bg-white/80 backdrop-blur-md border-b sticky top-0 z-50 px-6 py-3 flex justify-between items-center">
-        <div class="flex items-center gap-3">
-            <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold">印</div>
-            <span class="font-bold text-lg tracking-tight">Privacy OCR</span>
+    <nav class="bg-white border-b border-slate-200 px-8 py-4 flex justify-between items-center sticky top-0 z-50 shadow-sm">
+        <div class="flex items-center gap-2">
+            <div class="bg-blue-600 text-white p-2 rounded-lg font-bold text-xl leading-none">OCR</div>
+            <h1 class="text-xl font-bold">Privacy-First <span class="text-blue-600">Invoice</span></h1>
         </div>
-        <div class="flex items-center gap-4">
-            <span class="text-[12px] bg-emerald-50 text-emerald-600 px-3 py-1 rounded-full border border-emerald-100 font-medium">
-                🛡️ 隐私保护：所有处理均在本地浏览器完成，数据永不上传
-            </span>
+        <div class="bg-emerald-50 text-emerald-600 px-4 py-1.5 rounded-full text-xs font-bold border border-emerald-100">
+            🛡️ 本地处理：所有数据不离开您的浏览器
         </div>
     </nav>
 
-    <main class="max-w-[1400px] mx-auto p-4 md:p-8">
+    <main id="app-container" class="max-w-[1500px] mx-auto p-6">
         
-        <section id="step1" class="block">
-            <div class="flex flex-col items-center justify-center py-20">
-                <div class="text-center mb-10">
-                    <h1 class="text-4xl font-extrabold text-slate-900 mb-4">中国电子发票识别</h1>
-                    <p class="text-slate-500">支持批量处理图片与 PDF，结构化导出 Excel</p>
+        <section id="page-1" class="block py-20 text-center">
+            <h2 class="text-4xl font-black text-slate-800 mb-4">中国电子发票本地识别</h2>
+            <p class="text-slate-500 mb-12 text-lg">无需上传，隐私优先，支持 PDF 及图片批量导出 Excel</p>
+            
+            <div id="drop-area" class="w-full max-w-3xl mx-auto h-80 border-4 border-dashed border-slate-200 rounded-[2rem] bg-white flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all group">
+                <input type="file" id="file-select" multiple accept="image/*,.pdf" class="hidden">
+                <div class="w-20 h-20 bg-slate-50 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                    <svg class="w-10 h-10 text-slate-400 group-hover:text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
                 </div>
-
-                <div id="drop-zone" class="w-full max-w-3xl h-72 border-2 border-dashed border-slate-300 rounded-3xl bg-white hover:border-blue-500 hover:bg-blue-50/50 transition-all cursor-pointer flex flex-col items-center justify-center group">
-                    <input type="file" id="file-input" multiple accept="image/*,.pdf" class="hidden">
-                    <div class="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                        <svg class="w-8 h-8 text-slate-400 group-hover:text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
-                    </div>
-                    <p class="text-lg font-semibold text-slate-700">点击或拖拽文件到这里</p>
-                    <p class="text-sm text-slate-400 mt-1">支持单张模式与批量模式 (JPG, PNG, PDF)</p>
-                </div>
+                <p class="text-xl font-bold text-slate-700">将发票拖拽至此 或 点击选择</p>
+                <p class="text-sm text-slate-400 mt-2 font-medium">支持多张 JPG, PNG, PDF 格式</p>
             </div>
         </section>
 
-        <section id="step2" class="hidden">
-            <div class="flex flex-col lg:flex-row gap-6 h-[calc(100vh-180px)]">
-                
-                <div class="flex-1 bg-slate-900 rounded-2xl overflow-hidden relative flex flex-col border border-slate-800">
-                    <div class="bg-slate-800/50 px-4 py-3 flex justify-between items-center">
-                        <span id="page-indicator" class="text-slate-300 text-sm font-medium">1 / 1</span>
-                        <div class="flex gap-2">
-                            <button onclick="changePage(-1)" class="p-1.5 hover:bg-slate-700 rounded-md text-slate-300 disabled:opacity-20" id="btn-prev">
-                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+        <section id="page-2" class="hidden">
+            <div class="flex flex-col lg:flex-row gap-8 h-[calc(100vh-180px)]">
+                <div class="flex-1 bg-slate-800 rounded-3xl overflow-hidden relative border border-slate-700 shadow-inner flex flex-col">
+                    <div class="bg-slate-900/50 px-6 py-3 flex justify-between items-center border-b border-slate-700">
+                        <span id="index-label" class="text-slate-400 text-sm font-bold uppercase tracking-wider">File 1 / 1</span>
+                        <div class="flex gap-4">
+                            <button onclick="navFile(-1)" class="text-white hover:text-blue-400 disabled:opacity-20 transition-colors">
+                                <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z"></path></svg>
                             </button>
-                            <button onclick="changePage(1)" class="p-1.5 hover:bg-slate-700 rounded-md text-slate-300 disabled:opacity-20" id="btn-next">
-                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                            <button onclick="navFile(1)" class="text-white hover:text-blue-400 disabled:opacity-20 transition-colors">
+                                <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"></path></svg>
                             </button>
                         </div>
                     </div>
-                    
-                    <div class="flex-1 flex items-center justify-center p-6 overflow-hidden">
-                        <canvas id="pdf-render-canvas" class="hidden shadow-2xl max-w-full max-h-full"></svg>
-                        <img id="image-viewer" class="max-w-full max-h-full object-contain shadow-2xl" src="" alt="">
+                    <div class="flex-1 p-6 flex items-center justify-center overflow-hidden">
+                        <canvas id="canvas-pdf" class="hidden max-w-full max-h-full shadow-2xl"></canvas>
+                        <img id="img-viewer" class="max-w-full max-h-full object-contain shadow-2xl" src="" alt="预览">
                     </div>
-
-                    <div id="ocr-overlay" class="absolute inset-0 bg-slate-900/80 backdrop-blur-sm flex flex-col items-center justify-center text-white hidden">
-                        <div class="loading-ring mb-4"></div>
-                        <p id="ocr-progress-text" class="text-sm font-medium tracking-wide">正在初始化本地 OCR 引擎...</p>
+                    <div id="ocr-spinner" class="absolute inset-0 bg-slate-900/90 backdrop-blur flex flex-col items-center justify-center text-white hidden">
+                        <div class="loading-spin mb-6"></div>
+                        <p id="ocr-status-msg" class="text-sm font-bold tracking-widest text-blue-400 uppercase">初始化本地引擎...</p>
                     </div>
                 </div>
 
-                <div class="w-full lg:w-[450px] flex flex-col gap-4">
-                    <div class="bg-white rounded-2xl p-6 border shadow-sm flex flex-col overflow-hidden h-2/3">
+                <div class="w-full lg:w-[480px] flex flex-col gap-6">
+                    <div class="bg-white rounded-3xl p-8 border border-slate-200 shadow-sm flex flex-col flex-1 overflow-hidden">
                         <div class="flex justify-between items-center mb-6">
-                            <h3 class="font-bold text-slate-800">数据校对</h3>
-                            <button onclick="document.getElementById('file-input').click()" class="text-blue-600 text-sm font-semibold">+ 添加文件</button>
+                            <h3 class="text-lg font-black italic">数据校对</h3>
+                            <button onclick="document.getElementById('file-select').click()" class="text-blue-600 text-sm font-bold hover:underline">新增文件</button>
                         </div>
-                        <div id="data-form" class="space-y-4 overflow-y-auto custom-scrollbar pr-2 flex-1">
+                        <div id="invoice-fields" class="space-y-5 overflow-y-auto custom-scroll pr-2 flex-1">
                             </div>
                     </div>
 
-                    <div class="bg-white rounded-2xl border shadow-sm flex flex-col overflow-hidden h-1/3">
-                        <div class="px-4 py-3 border-b bg-slate-50 flex justify-between items-center">
-                            <span class="text-xs font-bold text-slate-500 uppercase">当前队列</span>
-                            <span id="queue-count" class="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">0 张</span>
+                    <div class="bg-white rounded-3xl border border-slate-200 shadow-sm h-1/3 flex flex-col overflow-hidden">
+                        <div class="px-6 py-3 border-b bg-slate-50 flex justify-between items-center">
+                            <span class="text-[10px] font-black text-slate-400 tracking-tighter">QUEUE LIST</span>
+                            <span id="badge-total" class="text-[10px] bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full font-bold">0 张</span>
                         </div>
-                        <div class="flex-1 overflow-y-auto custom-scrollbar" id="file-queue-list">
+                        <div id="queue-box" class="flex-1 overflow-y-auto custom-scroll">
                             </div>
-                        <div class="p-3 bg-white border-t">
-                            <button onclick="switchStep(3)" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold transition-all shadow-lg shadow-blue-100">
-                                导出结果
+                        <div class="p-4">
+                            <button onclick="showStep(3)" class="w-full bg-slate-900 text-white py-4 rounded-2xl font-bold hover:bg-blue-600 transition-all shadow-lg shadow-slate-200">
+                                完成核对并导出
                             </button>
                         </div>
                     </div>
@@ -109,70 +101,50 @@
             </div>
         </section>
 
-        <section id="step3" class="hidden">
-            <div class="max-w-4xl mx-auto">
-                <div class="bg-white rounded-3xl border shadow-xl p-8">
-                    <h2 class="text-2xl font-bold text-slate-900 mb-8 flex items-center gap-3">
-                        <span class="w-10 h-10 bg-green-100 text-green-600 rounded-full flex items-center justify-center italic">i</span>
-                        导出配置管理
-                    </h2>
+        <section id="page-3" class="hidden max-w-3xl mx-auto">
+            <div class="bg-white rounded-[2.5rem] border border-slate-200 shadow-2xl p-10">
+                <h2 class="text-2xl font-black mb-10 flex items-center gap-3">
+                    <div class="w-10 h-10 bg-blue-600 rounded-2xl flex items-center justify-center text-white italic">i</div>
+                    选择导出配置
+                </h2>
 
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-10">
-                        <div class="space-y-8">
-                            <div>
-                                <label class="block text-sm font-bold text-slate-700 mb-4">导出逻辑</label>
-                                <div class="grid gap-3">
-                                    <label class="flex items-center p-4 border rounded-2xl cursor-pointer hover:bg-blue-50 transition-all has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50">
-                                        <input type="radio" name="export-logic" value="merge" checked class="w-4 h-4 text-blue-600">
-                                        <div class="ml-4">
-                                            <p class="font-bold text-slate-800">全部合并导出</p>
-                                            <p class="text-xs text-slate-400 italic">生成一个单一的 Excel 文件</p>
-                                        </div>
-                                    </label>
-                                    <label class="flex items-center p-4 border rounded-2xl cursor-pointer hover:bg-blue-50 transition-all has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50">
-                                        <input type="radio" name="export-logic" value="tax" class="w-4 h-4 text-blue-600">
-                                        <div class="ml-4">
-                                            <p class="font-bold text-slate-800">按税务局分类</p>
-                                            <p class="text-xs text-slate-400 italic">不同地区的税务局生成独立文件</p>
-                                        </div>
-                                    </label>
-                                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-10 mb-12">
+                    <div class="space-y-8">
+                        <div>
+                            <p class="text-xs font-black text-slate-400 mb-4 tracking-widest uppercase">1. 导出逻辑</p>
+                            <div class="space-y-3">
+                                <label class="flex items-center p-4 border-2 rounded-2xl cursor-pointer hover:bg-blue-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 transition-all">
+                                    <input type="radio" name="logic" value="merge" checked class="w-5 h-5 text-blue-600">
+                                    <span class="ml-4 font-bold text-slate-700">全部合并为一个文件</span>
+                                </label>
+                                <label class="flex items-center p-4 border-2 rounded-2xl cursor-pointer hover:bg-blue-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 transition-all">
+                                    <input type="radio" name="logic" value="split" class="w-5 h-5 text-blue-600">
+                                    <span class="ml-4 font-bold text-slate-700">按税务局地区分卷</span>
+                                </label>
                             </div>
-
-                            <div>
-                                <label class="block text-sm font-bold text-slate-700 mb-4">金额范围过滤</label>
-                                <div class="flex items-center gap-3">
-                                    <input type="number" id="filter-min" placeholder="￥ 0.00" class="w-full border p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none">
-                                    <span class="text-slate-300">至</span>
-                                    <input type="number" id="filter-max" placeholder="不限" class="w-full border p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none">
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="bg-slate-50 rounded-3xl p-8 border border-slate-100 flex flex-col justify-center text-center">
-                            <h3 class="font-bold text-slate-800 mb-6">下载格式选择</h3>
-                            <div class="grid gap-4">
-                                <button onclick="handleExportAction('xlsx')" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-emerald-100 transition-all">
-                                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6m4 18H6V4h7v5h5v11m-10-2h8v-2h-8v2m0-4h8v-2h-8v2m0-4h5v-2h-5v2z"/></svg>
-                                    导出 Excel (.xlsx)
-                                </button>
-                                <button onclick="handleExportAction('csv')" class="w-full bg-slate-800 hover:bg-slate-900 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all">
-                                    导出 CSV (.csv)
-                                </button>
-                            </div>
-                            <p class="text-[11px] text-slate-400 mt-6 leading-relaxed">
-                                注意：批量导出多个文件时，请确保浏览器允许弹出窗口。所有操作均在您的浏览器本地内存中完成，安全可靠。
-                            </p>
                         </div>
                     </div>
 
-                    <div class="mt-10 pt-8 border-t flex justify-between items-center">
-                        <button onclick="switchStep(2)" class="text-slate-500 hover:text-blue-600 font-semibold flex items-center gap-2 transition-colors">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7 7-7"></path></svg>
-                            返回数据核对
-                        </button>
-                        <button onclick="location.reload()" class="text-red-400 hover:text-red-600 text-sm font-medium">清空数据并退出</button>
+                    <div class="bg-slate-50 rounded-3xl p-8 border border-slate-100">
+                        <p class="text-xs font-black text-slate-400 mb-6 tracking-widest uppercase text-center">2. 执行下载</p>
+                        <div class="grid gap-4">
+                            <button onclick="startExport('xlsx')" class="bg-emerald-600 hover:bg-emerald-700 text-white p-5 rounded-2xl font-black flex items-center justify-center gap-3 transition-all shadow-lg shadow-emerald-100">
+                                <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z"></path></svg>
+                                EXCEL (.XLSX)
+                            </button>
+                            <button onclick="startExport('csv')" class="bg-slate-800 hover:bg-slate-900 text-white p-5 rounded-2xl font-black transition-all">
+                                CSV 纯文本
+                            </button>
+                        </div>
                     </div>
+                </div>
+
+                <div class="flex justify-between items-center border-t border-slate-100 pt-8">
+                    <button onclick="showStep(2)" class="text-slate-500 font-bold hover:text-blue-600 transition-colors flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7 7-7"></path></svg>
+                        返回上一步
+                    </button>
+                    <button onclick="location.reload()" class="text-red-400 text-sm font-bold hover:underline">清空并重新开始</button>
                 </div>
             </div>
         </section>
@@ -180,281 +152,220 @@
 
     <script>
         /**
-         * 全局状态与配置
+         * 核心状态模型
          */
-        let state = {
-            files: [], // { id, file, type, preview, data, status: 'pending'|'done' }
-            currentIndex: 0,
-            worker: null,
-            pdfLib: window['pdfjs-dist/build/pdf']
+        const state = {
+            queue: [], // { id, file, type, preview, data, status: 'pending'|'done' }
+            current: 0,
+            ocr: null,
+            pdf: window['pdfjs-dist/build/pdf']
         };
 
-        state.pdfLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        // PDF.js Worker 配置使用绝对 URL (安全)
+        state.pdf.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-        const configFields = [
-            { key: 'invoiceNum', label: '发票号码', reg: /(?:代码|号码)[:：]?\s*(\d+)/ },
+        // 提取字段配置
+        const fieldsCfg = [
+            { key: 'id', label: '发票号码', reg: /(?:代码|号码)[:：]?\s*(\d+)/ },
             { key: 'date', label: '开票日期', reg: /(\d{4}\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日)/ },
-            { key: 'buyer', label: '购买方名称', reg: /(?:购买方|名称)[:：]?\s*([\u4e00-\u9fa5（）]{4,})/ },
-            { key: 'seller', label: '销售方名称', reg: /(?:销售方|名称)[:：]?\s*([\u4e00-\u9fa5（）]{4,})/ },
-            { key: 'taxId', label: '销售方识别号', reg: /[A-Z0-9]{15,20}/ },
-            { key: 'total', label: '价税合计', reg: /(?:合计|小写)[:：]?\s*[￥¥]?\s*(\d+\.\d{2})/ },
+            { key: 'buyer', label: '购买方', reg: /(?:购买方|名称)[:：]?\s*([\u4e00-\u9fa5（）]{4,})/ },
+            { key: 'seller', label: '销售方', reg: /(?:销售方|名称)[:：]?\s*([\u4e00-\u9fa5（）]{4,})/ },
+            { key: 'total', label: '合计金额', reg: /(?:合计|小写)[:：]?\s*[￥¥]?\s*(\d+\.\d{2})/ },
             { key: 'tax', label: '税额', reg: /税\s*额[:：]?\s*[￥¥]?\s*(\d+\.\d{2})/ },
-            { key: 'authority', label: '公章税务局', reg: /([\u4e00-\u9fa5]{2,}(?:税务局|税务分局))/ }
+            { key: 'org', label: '税务局', reg: /([\u4e00-\u9fa5]{2,}(?:税务局|税务分局))/ }
         ];
 
         /**
-         * 1. OCR 引擎初始化 (核心：路径适配 GitHub Pages)
+         * 1. 初始化本地 OCR (修正相对路径)
          */
-        async function getOCRWorker() {
-            if (!state.worker) {
-                updateOCRStatus('正在初始化本地语言包...');
+        async function getWorker() {
+            if (!state.ocr) {
+                setOCRMsg('加载本地语言包...');
                 
-                // 动态计算相对路径：兼容 GitHub Pages 子路径
-                // 若地址为 /repo/index.html，则路径为 /repo/tessdata
-                const basePath = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/'));
-                const localLangPath = window.location.origin + basePath + '/tessdata';
+                // 【核心修改】计算相对于 index.html 的目录路径
+                // 这种方式兼容 github.io/repo/index.html 结构
+                const baseDir = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/'));
+                const langPath = window.location.origin + (baseDir === '/' ? '' : baseDir) + '/tessdata';
 
-                state.worker = await Tesseract.createWorker('chi_sim', 1, {
-                    langPath: localLangPath,
-                    gzip: false, // .traineddata 原始文件
+                state.ocr = await Tesseract.createWorker('chi_sim', 1, {
+                    langPath: langPath,
+                    gzip: false, 
                     workerPath: 'https://unpkg.com/tesseract.js@5.0.3/dist/worker.min.js',
                     corePath: 'https://unpkg.com/tesseract.js-core@5.0.0/tesseract.js-core.wasm.js',
                     logger: m => {
-                        if (m.status === 'recognizing text') {
-                            updateOCRStatus(`文本识别中: ${Math.floor(m.progress * 100)}%`);
-                        }
+                        if (m.status === 'recognizing text') setOCRMsg(`正在解析: ${Math.round(m.progress * 100)}%`);
                     }
                 });
             }
-            return state.worker;
+            return state.ocr;
         }
 
         /**
-         * 2. 文件上传处理
+         * 2. 文件上传逻辑
          */
-        const fileInput = document.getElementById('file-input');
-        const dropZone = document.getElementById('drop-zone');
+        const fileInp = document.getElementById('file-select');
+        const dropBox = document.getElementById('drop-area');
 
-        dropZone.onclick = () => fileInput.click();
-        fileInput.onchange = (e) => handleIncomingFiles(e.target.files);
+        dropBox.onclick = () => fileInp.click();
+        fileInp.onchange = (e) => addFiles(e.target.files);
+        
+        dropBox.ondragover = (e) => { e.preventDefault(); dropBox.classList.add('border-blue-400', 'bg-blue-50'); };
+        dropBox.ondragleave = () => dropBox.classList.remove('border-blue-400', 'bg-blue-50');
+        dropBox.ondrop = (e) => { e.preventDefault(); addFiles(e.dataTransfer.files); };
 
-        // 拖拽
-        dropZone.ondragover = (e) => { e.preventDefault(); dropZone.classList.add('border-blue-500', 'bg-blue-50'); };
-        dropZone.ondragleave = () => { dropZone.classList.remove('border-blue-500', 'bg-blue-50'); };
-        dropZone.ondrop = (e) => { e.preventDefault(); handleIncomingFiles(e.dataTransfer.files); };
-
-        async function handleIncomingFiles(fileList) {
-            if (!fileList.length) return;
-            
-            for (const file of Array.from(fileList)) {
-                const item = {
-                    id: Date.now() + Math.random(),
-                    file: file,
-                    type: file.type,
+        async function addFiles(list) {
+            if (!list.length) return;
+            for (const f of Array.from(list)) {
+                state.queue.push({
+                    id: Math.random().toString(36).substr(2, 9),
+                    file: f,
+                    type: f.type,
                     preview: null,
                     status: 'pending',
-                    data: configFields.reduce((acc, f) => ({ ...acc, [f.key]: '' }), {})
-                };
-                state.files.push(item);
-            }
-            switchStep(2);
-            renderCurrentFile();
-            updateQueueList();
-        }
-
-        /**
-         * 3. 页面渲染逻辑
-         */
-        async function renderCurrentFile() {
-            const current = state.files[state.currentIndex];
-            const imgView = document.getElementById('image-viewer');
-            const canvasView = document.getElementById('pdf-render-canvas');
-            
-            // UI 更新
-            document.getElementById('page-indicator').innerText = `${state.currentIndex + 1} / ${state.files.length}`;
-            document.getElementById('queue-count').innerText = `${state.files.length} 张`;
-            
-            // 重置视图
-            imgView.classList.add('hidden');
-            canvasView.classList.add('hidden');
-
-            // 转换文件为识别用图片
-            if (!current.preview) {
-                if (current.type === 'application/pdf') {
-                    current.preview = await pdfToImage(current.file);
-                } else {
-                    current.preview = URL.createObjectURL(current.file);
-                }
-            }
-
-            // 显示预览
-            if (current.type === 'application/pdf') {
-                const ctx = canvasView.getContext('2d');
-                const img = new Image();
-                img.onload = () => {
-                    canvasView.width = img.width;
-                    canvasView.height = img.height;
-                    ctx.drawImage(img, 0, 0);
-                    canvasView.classList.remove('hidden');
-                };
-                img.src = current.preview;
-            } else {
-                imgView.src = current.preview;
-                imgView.classList.remove('hidden');
-            }
-
-            renderDataForm(current);
-            updateQueueList();
-
-            // 如果没识别过则启动 OCR
-            if (current.status === 'pending') {
-                runOCRTask(current);
-            }
-        }
-
-        async function pdfToImage(file) {
-            const data = await file.arrayBuffer();
-            const pdf = await state.pdfLib.getDocument(data).promise;
-            const page = await pdf.getPage(1);
-            const viewport = page.getViewport({ scale: 2.0 });
-            const canvas = document.createElement('canvas');
-            const context = canvas.getContext('2d');
-            canvas.height = viewport.height;
-            canvas.width = viewport.width;
-            await page.render({ canvasContext: context, viewport: viewport }).promise;
-            return canvas.toDataURL('image/png');
-        }
-
-        /**
-         * 4. OCR 识别任务
-         */
-        async function runOCRTask(item) {
-            const overlay = document.getElementById('ocr-overlay');
-            overlay.classList.remove('hidden');
-
-            try {
-                const worker = await getOCRWorker();
-                const { data: { text } } = await worker.recognize(item.preview);
-                
-                // 正则解析
-                configFields.forEach(f => {
-                    const match = text.match(f.reg);
-                    if (match) item.data[f.key] = match[1] || match[0];
+                    data: fieldsCfg.reduce((acc, c) => ({ ...acc, [c.key]: '' }), {})
                 });
-
-                item.status = 'done';
-                renderDataForm(item);
-                updateQueueList();
-            } catch (err) {
-                console.error(err);
-                alert('识别出错，请检查本地资源路径');
-            } finally {
-                overlay.classList.add('hidden');
             }
+            showStep(2);
+            refreshView();
         }
 
         /**
-         * 5. UI 交互组件
+         * 3. 页面显示与预览
          */
-        function renderDataForm(item) {
-            const container = document.getElementById('data-form');
-            container.innerHTML = '';
-            configFields.forEach(f => {
-                const div = document.createElement('div');
-                div.innerHTML = `
-                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">${f.label}</label>
-                    <input type="text" value="${item.data[f.key]}" 
-                           class="w-full border border-slate-200 p-2.5 rounded-xl text-sm focus:border-blue-500 focus:ring-4 focus:ring-blue-50 outline-none transition-all"
-                           oninput="updateItemData('${f.key}', this.value)">
-                `;
-                container.appendChild(div);
-            });
-        }
+        async function refreshView() {
+            const cur = state.queue[state.current];
+            const iv = document.getElementById('img-viewer');
+            const cv = document.getElementById('canvas-pdf');
+            
+            document.getElementById('index-label').innerText = `Invoice ${state.current + 1} / ${state.queue.length}`;
+            document.getElementById('badge-total').innerText = `${state.queue.length} 张`;
+            
+            iv.classList.add('hidden');
+            cv.classList.add('hidden');
 
-        function updateItemData(key, val) {
-            state.files[state.currentIndex].data[key] = val;
-        }
-
-        function updateQueueList() {
-            const list = document.getElementById('file-queue-list');
-            list.innerHTML = '';
-            state.files.forEach((f, i) => {
-                const div = document.createElement('div');
-                div.className = `px-4 py-3 cursor-pointer border-b text-sm flex items-center justify-between transition-colors ${i === state.currentIndex ? 'invoice-card-active' : 'hover:bg-slate-50'}`;
-                div.innerHTML = `
-                    <div class="truncate pr-4">
-                        <p class="font-medium text-slate-700 truncate">${f.file.name}</p>
-                        <p class="text-[10px] text-slate-400 font-mono italic">${f.data.invoiceNum || (f.status === 'done' ? '未识别到号码' : '等待识别...')}</p>
-                    </div>
-                    ${f.status === 'done' ? '✅' : '<span class="animate-pulse">⏳</span>'}
-                `;
-                div.onclick = () => { state.currentIndex = i; renderCurrentFile(); };
-                list.appendChild(div);
-            });
-        }
-
-        function changePage(dir) {
-            const target = state.currentIndex + dir;
-            if (target >= 0 && target < state.files.length) {
-                state.currentIndex = target;
-                renderCurrentFile();
+            if (!cur.preview) {
+                cur.preview = cur.type === 'application/pdf' ? await pdf2Img(cur.file) : URL.createObjectURL(cur.file);
             }
-        }
 
-        function switchStep(num) {
-            document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
-            document.getElementById(`step${num}`).classList.remove('hidden');
-            window.scrollTo(0, 0);
-        }
-
-        function updateOCRStatus(txt) {
-            document.getElementById('ocr-progress-text').innerText = txt;
-        }
-
-        /**
-         * 6. 导出逻辑
-         */
-        function handleExportAction(ext) {
-            const logic = document.querySelector('input[name="export-logic"]:checked').value;
-            const min = parseFloat(document.getElementById('filter-min').value) || 0;
-            const max = parseFloat(document.getElementById('filter-max').value) || Infinity;
-
-            // 过滤
-            let results = state.files.map(f => f.data).filter(d => {
-                const amt = parseFloat(d.total) || 0;
-                return amt >= min && amt <= max;
-            });
-
-            if (results.length === 0) return alert('没有符合过滤条件的发票数据');
-
-            if (logic === 'merge') {
-                triggerDownload(results, '所有发票汇总', ext);
+            if (cur.type === 'application/pdf') {
+                const ctx = cv.getContext('2d');
+                const i = new Image();
+                i.onload = () => { cv.width = i.width; cv.height = i.height; ctx.drawImage(i, 0, 0); cv.classList.remove('hidden'); };
+                i.src = cur.preview;
             } else {
-                // 按税务局分组
-                const groups = results.reduce((acc, curr) => {
-                    const key = curr.authority || '未知税务局';
-                    if (!acc[key]) acc[key] = [];
-                    acc[key].push(curr);
+                iv.src = cur.preview;
+                iv.classList.remove('hidden');
+            }
+
+            renderForm(cur);
+            renderQueue();
+
+            if (cur.status === 'pending') startOCR(cur);
+        }
+
+        async function pdf2Img(f) {
+            const buf = await f.arrayBuffer();
+            const pdfDoc = await state.pdf.getDocument(buf).promise;
+            const page = await pdfDoc.getPage(1);
+            const vp = page.getViewport({ scale: 2.0 }); // 提升OCR清晰度
+            const cvs = document.createElement('canvas');
+            const ctx = cvs.getContext('2d');
+            cvs.height = vp.height; cvs.width = vp.width;
+            await page.render({ canvasContext: ctx, viewport: vp }).promise;
+            return cvs.toDataURL('image/png');
+        }
+
+        /**
+         * 4. OCR 核心
+         */
+        async function startOCR(item) {
+            const loading = document.getElementById('ocr-spinner');
+            loading.classList.remove('hidden');
+            try {
+                const w = await getWorker();
+                const { data: { text } } = await w.recognize(item.preview);
+                fieldsCfg.forEach(c => {
+                    const m = text.match(c.reg);
+                    if (m) item.data[c.key] = m[1] || m[0];
+                });
+                item.status = 'done';
+                renderForm(item);
+                renderQueue();
+            } catch (e) {
+                alert('本地语言包加载失败，请检查 ./tessdata/ 目录结构');
+            } finally {
+                loading.classList.add('hidden');
+            }
+        }
+
+        /**
+         * 5. UI 渲染组件
+         */
+        function renderForm(item) {
+            const box = document.getElementById('invoice-fields');
+            box.innerHTML = '';
+            fieldsCfg.forEach(c => {
+                const div = document.createElement('div');
+                div.innerHTML = `
+                    <label class="block text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest">${c.label}</label>
+                    <input type="text" value="${item.data[c.key]}" 
+                           class="w-full border border-slate-200 p-3 rounded-xl text-sm font-bold focus:ring-4 focus:ring-blue-50 focus:border-blue-500 outline-none transition-all"
+                           oninput="updateData('${c.key}', this.value)">
+                `;
+                box.appendChild(div);
+            });
+        }
+
+        function renderQueue() {
+            const box = document.getElementById('queue-box');
+            box.innerHTML = '';
+            state.queue.forEach((f, i) => {
+                const d = document.createElement('div');
+                d.className = `px-6 py-4 cursor-pointer border-b flex items-center justify-between transition-all ${i === state.current ? 'active-file' : 'hover:bg-slate-50'}`;
+                d.innerHTML = `
+                    <div class="truncate pr-4 flex-1">
+                        <p class="text-xs font-black text-slate-700 truncate mb-0.5">${f.file.name}</p>
+                        <p class="text-[10px] text-slate-400 font-bold">${f.data.id || (f.status==='done'?'未识别':'识别中...')}</p>
+                    </div>
+                    ${f.status === 'done' ? '<span class="text-blue-500">●</span>' : '<span class="animate-pulse text-slate-200">●</span>'}
+                `;
+                d.onclick = () => { state.current = i; refreshView(); };
+                box.appendChild(d);
+            });
+        }
+
+        /**
+         * 6. 操作函数
+         */
+        function updateData(k, v) { state.queue[state.current].data[k] = v; }
+        function navFile(d) { const n = state.current + d; if (n >= 0 && n < state.queue.length) { state.current = n; refreshView(); } }
+        function showStep(n) { document.querySelectorAll('section').forEach(s => s.classList.add('hidden')); document.getElementById(`page-${n}`).classList.remove('hidden'); window.scrollTo(0,0); }
+        function setOCRMsg(t) { document.getElementById('ocr-status-msg').innerText = t; }
+
+        function startExport(ext) {
+            const mode = document.querySelector('input[name="logic"]:checked').value;
+            const dataArr = state.queue.map(f => f.data);
+            
+            if (mode === 'merge') {
+                saveXlsx(dataArr, '发票汇总', ext);
+            } else {
+                const groups = dataArr.reduce((acc, c) => {
+                    const k = c.org || '未知税务局';
+                    if (!acc[k]) acc[k] = [];
+                    acc[k].push(c);
                     return acc;
                 }, {});
-
-                Object.keys(groups).forEach(key => {
-                    triggerDownload(groups[key], `发票分类_${key}`, ext);
-                });
+                Object.keys(groups).forEach(k => saveXlsx(groups[k], `发票_${k}`, ext));
             }
         }
 
-        function triggerDownload(data, name, ext) {
-            const ws = XLSX.utils.json_to_sheet(data);
+        function saveXlsx(arr, name, ext) {
+            const ws = XLSX.utils.json_to_sheet(arr);
             const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "OCR数据");
-            const filename = `${name}_${new Date().toLocaleDateString().replace(/\//g, '-')}.${ext}`;
-            
-            if (ext === 'xlsx') {
-                XLSX.writeFile(wb, filename);
-            } else {
-                XLSX.writeFile(wb, filename, { bookType: 'csv' });
-            }
+            XLSX.utils.book_append_sheet(wb, ws, "数据");
+            const fname = `${name}_${new Date().getTime()}.${ext}`;
+            if (ext === 'xlsx') XLSX.writeFile(wb, fname);
+            else XLSX.writeFile(wb, fname, { bookType: 'csv' });
         }
     </script>
 </body>
