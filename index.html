@@ -188,6 +188,7 @@
 
     const worker = await Tesseract.createWorker({
       langPath: './tessdata',
+      gzip: false,
       logger: m => {
         if (m.status === 'recognizing text') {
           setOCRMsg(`识别中：${Math.round(m.progress * 100)}%`);
@@ -389,6 +390,7 @@
     </script>
 </body>
 </html>
+
 
 
 
