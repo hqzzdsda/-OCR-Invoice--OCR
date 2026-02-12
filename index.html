@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Privacy-First Invoice OCR | 隐私优先发票识别</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.1.1/dist/tesseract.min.js"></script>
+    <script src="./tesseract.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
@@ -182,11 +182,12 @@
         /**
          * 1. OCR 引擎初始化 (GitHub Pages 路径兼容)
          */
-        async function getWorker() {
+       async function getWorker() {
   if (!state.ocr) {
     setOCRMsg('加载OCR引擎...');
 
     const worker = Tesseract.createWorker({
+      workerPath: './worker.min.js',
       langPath: './tessdata',
       logger: m => {
         if (m.status === 'recognizing text') {
@@ -208,6 +209,7 @@
 
   return state.ocr;
 }
+
 
 
 
@@ -391,6 +393,7 @@
     </script>
 </body>
 </html>
+
 
 
 
