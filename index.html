@@ -183,25 +183,28 @@
          * 1. OCR 引擎初始化 (GitHub Pages 路径兼容)
          */
         async function getWorker() {
-            if (!state.ocr) {
-                setOCRMsg('加载本地语言包...');
-                
-                // 计算相对于 index.html 的目录路径
-                const baseDir = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/'));
-                const langPath = window.location.origin + (baseDir === '/' ? '' : baseDir) + '/tessdata';
+  if (!state.ocr) {
+    setOCRMsg('加载本地语言包...');
 
-                state.ocr = await Tesseract.createWorker('chi_sim', 1, {
-                    langPath: "https://hqzzdsda.github.io/-OCR-Invoice--OCR/tessdata",
-                    gzip: false, 
-                    workerPath: 'https://unpkg.com/tesseract.js@5.0.3/dist/worker.min.js',
-                    corePath: 'https://unpkg.com/tesseract.js-core@5.0.0/tesseract.js-core.wasm.js',
-                    logger: m => {
-                        if (m.status === 'recognizing text') setOCRMsg(`正在解析: ${Math.round(m.progress * 100)}%`);
-                    }
-                });
-            }
-            return state.ocr;
+    const worker = await Tesseract.createWorker({
+      workerPath: 'https://unpkg.com/tesseract.js@5.0.3/dist/worker.min.js',
+      corePath: 'https://unpkg.com/tesseract.js-core@5.0.0/tesseract.js-core.wasm.js',
+      langPath: 'https://hqzzdsda.github.io/-OCR-Invoice--OCR/tessdata',
+      logger: m => {
+        if (m.status === 'recognizing text') {
+          setOCRMsg(`正在解析: ${Math.round(m.progress * 100)}%`);
         }
+      }
+    });
+
+    await worker.loadLanguage('chi_sim');
+    await worker.initialize('chi_sim');
+
+    state.ocr = worker;
+  }
+  return state.ocr;
+}
+
 
         /**
          * 2. 文件上传逻辑
@@ -383,6 +386,7 @@
     </script>
 </body>
 </html>
+
 
 
 
