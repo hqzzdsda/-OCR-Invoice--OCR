@@ -184,10 +184,9 @@
          */
        async function getWorker() {
   if (!state.ocr) {
-    setOCRMsg('加载OCR引擎...');
+    setOCRMsg('加载 OCR 引擎…');
 
     const worker = Tesseract.createWorker({
-      workerPath: './worker.min.js',
       langPath: './tessdata',
       logger: m => {
         if (m.status === 'recognizing text') {
@@ -200,15 +199,12 @@
     await worker.loadLanguage('chi_sim');
     await worker.initialize('chi_sim');
 
-    await worker.setParameters({
-      tessedit_pageseg_mode: 6
-    });
-
     state.ocr = worker;
   }
 
   return state.ocr;
 }
+
 
 
 
@@ -393,6 +389,7 @@
     </script>
 </body>
 </html>
+
 
 
 
