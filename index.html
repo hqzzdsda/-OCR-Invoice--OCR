@@ -170,13 +170,14 @@
         }
 
         const fieldsCfg = [
-    { key: 'id', label: '发票号码', reg: null }, // reg 属性不再关键，但保留结构
+    { key: 'id', label: '发票号码', reg: null },
     { key: 'date', label: '开票日期', reg: null },
     { key: 'buyer', label: '购买方名称', reg: null },
     { key: 'seller', label: '销售方名称', reg: null },
-    { key: 'sellerTaxId', label: '销售方税号', reg: null }, // <--- 新增字段
-    { key: 'total', label: '价税合计', reg: null },
+    { key: 'sellerTaxId', label: '销售方税号', reg: null },
+    { key: 'amount', label: '金额(不含税)', reg: null }, 
     { key: 'tax', label: '税额', reg: null },
+    { key: 'total', label: '价税合计', reg: null },
     { key: 'org', label: '税务局', reg: null }
 ];
         /**
@@ -304,18 +305,18 @@
         const { data } = await w.recognize(item.preview);
 
         // 2. 结构化解析 (v2.0)
-        const result = parseInvoice(data);
+        // 在 startOCR 函数内...
+const result = parseInvoice(data);
 
-        // 3. 映射到 UI 数据模型
-        // -------------------------------------------------
-        item.data.id          = result.invoiceNum;
-        item.data.date        = result.invoiceDate;
-        item.data.buyer       = result.buyerName;
-        item.data.seller      = result.sellerName;
-        item.data.sellerTaxId = result.sellerTaxId; 
-        item.data.total       = result.totalAmount;
-        item.data.tax         = result.taxAmount;
-        item.data.org         = result.taxBureau;
+item.data.id          = result.invoiceNum;
+item.data.date        = result.invoiceDate;
+item.data.buyer       = result.buyerName;
+item.data.seller      = result.sellerName;
+item.data.sellerTaxId = result.sellerTaxId;
+item.data.total       = result.totalAmount;
+item.data.amount      = result.amount;      
+item.data.tax         = result.taxAmount;
+item.data.org         = result.taxBureau;
         // -------------------------------------------------
 
         // 兜底逻辑：如果坐标定位没找到 ID/Date，再试一次全文正则 (可选)
@@ -436,127 +437,135 @@ function startExport(ext) {
  * 基于空间坐标的电子发票结构化解析 (v2.0 - 增加右上角 ID/Date 定位)
  * @param {object} ocrData - Tesseract.recognize 返回的 data 对象
  */
+/**
+ * 智能发票解析引擎 v3.0 (坐标定位 + 业务规则校验)
+ * @param {object} ocrData - Tesseract data 对象
+ */
 function parseInvoice(ocrData) {
     const result = {
-        invoiceNum: '',     // 发票号码 (新增)
-        invoiceDate: '',    // 开票日期 (新增)
-        buyerName: '',      // 购买方
-        sellerName: '',     // 销售方
+        invoiceNum: '',     // 发票号码
+        invoiceDate: '',    // 开票日期
+        buyerName: '',      // 购买方名称
+        sellerName: '',     // 销售方名称
         sellerTaxId: '',    // 销售方税号
-        totalAmount: '',    // 价税合计
+        totalAmount: '',    // 价税合计 (小写)
+        amount: '',         // 金额 (不含税)
         taxAmount: '',      // 税额
         taxBureau: ''       // 税务局
     };
 
-    if (!ocrData || !ocrData.lines || ocrData.lines.length === 0) return result;
+    if (!ocrData || !ocrData.lines) return result;
 
-    // 1. 计算画布边界
-    let maxX = 0, maxY = 0;
+    // 1. 计算画布边界与分区阈值
+    let maxY = 0, maxX = 0;
     ocrData.lines.forEach(l => {
-        if (l.bbox.x1 > maxX) maxX = l.bbox.x1;
         if (l.bbox.y1 > maxY) maxY = l.bbox.y1;
+        if (l.bbox.x1 > maxX) maxX = l.bbox.x1;
     });
 
-    // 2. 定义关键坐标阈值
-    const Y_TOP_LIMIT = maxY * 0.28;   // 头部区域 (通常前 28% 包含顶栏和右上角信息)
-    const Y_BOTTOM_START = maxY * 0.70; // 底部区域 (金额汇总)
-    const X_CENTER = maxX * 0.5;        // 中轴线
+    const Y_HEADER = maxY * 0.25;    // 头部区域 (发票号/日期/税务局)
+    const Y_FOOTER = maxY * 0.70;    // 底部区域 (金额汇总)
+    const X_CENTER = maxX * 0.50;    // 中轴线 (左买 / 右卖)
 
-    // 3. 遍历行
+    // 2. 临时容器：用于收集所有金额进行逻辑排序
+    let moneyCandidates = [];
+
+    // 3. 遍历所有文本行进行归类
     ocrData.lines.forEach(line => {
-        // 预处理文本
         const rawText = line.text.trim();
-        const cleanText = rawText.replace(/\s+/g, ''); // 去空字符用于正则判断
-        
-        // 计算当前行中心点
-        const cy = (line.bbox.y0 + line.bbox.y1) / 2;
-        const cx = (line.bbox.x0 + line.bbox.x1) / 2;
+        const cleanText = rawText.replace(/\s+/g, ''); // 去除空格方便正则
+        const cy = (line.bbox.y0 + line.bbox.y1) / 2;  // 行中心 Y
+        const cx = (line.bbox.x0 + line.bbox.x1) / 2;  // 行中心 X
 
-        // ============================================
-        // 区域 A: 头部 (Top)
-        // ============================================
-        if (cy < Y_TOP_LIMIT) {
-            
-            // ---> A1. 左侧/中间 (税务局公章)
-            if (cx < X_CENTER * 1.2) { // 稍微放宽到中间偏右一点点
-                if (/税务局|税务分局/.test(cleanText)) {
-                    const m = rawText.match(/[\u4e00-\u9fa5]{2,}(?:税务局|税务分局)/);
-                    if (m) result.taxBureau = m[0];
-                }
+        // --- A. 头部区域 (Header) ---
+        if (cy < Y_HEADER) {
+            // A1. 税务局 (通常在左侧或中间)
+            if (/税务局|税务分局/.test(cleanText)) {
+                const m = rawText.match(/[\u4e00-\u9fa5]{2,}(?:税务局|税务分局)/);
+                if (m) result.taxBureau = m[0];
             }
-            
-            // ---> A2. 右上角 (核心：发票号码、日期)
-            // 必须严格在右侧 (cx > X_CENTER)
-            if (cx > X_CENTER) {
-                
-                // 1. 提取发票号码 (特征：通常是 8位 或 20位纯数字，前缀可能是 No、号码)
-                // 排除 "发票代码" (通常 10/12 位)，我们主要想要 "号码"
-                if (/号码|No/.test(cleanText) || /^\d{8,20}$/.test(cleanText)) {
-                    // 提取连续数字
-                    const numMatch = rawText.match(/\d{8,20}/);
-                    // 简单的长度过滤：发票号码通常是 8位 或 20位(全电)，代码是10/12位
-                    // 这里优先取匹配到的最长数字串，或者符合特定长度的
-                    if (numMatch) {
-                        // 如果还没找到号码，或者新找到的看起来更像号码（比如没有被误读为日期）
-                        if (!result.invoiceNum) result.invoiceNum = numMatch[0];
-                    }
-                }
-
-                // 2. 提取开票日期 (特征：YYYY年MM月DD日)
-                if (/年/.test(cleanText) && /月/.test(cleanText) && /日/.test(cleanText)) {
-                    const dateMatch = rawText.match(/(\d{4}\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日)/);
-                    if (dateMatch) result.invoiceDate = dateMatch[1];
-                }
+            // A2. 发票号码 (右上角，纯数字，通常8位/20位)
+            else if (cx > X_CENTER && /\d{8,20}/.test(cleanText) && !/代码/.test(cleanText)) {
+                const m = cleanText.match(/\d{8,20}/);
+                // 排除日期误判，选最长的数字串
+                if (m && m[0].length >= 8) result.invoiceNum = m[0];
+            }
+            // A3. 开票日期 (右上角)
+            else if (cx > X_CENTER && /年/.test(cleanText) && /月/.test(cleanText)) {
+                const m = rawText.match(/(\d{4}\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日)/);
+                if (m) result.invoiceDate = m[1];
             }
         }
 
-        // ============================================
-        // 区域 B: 主体 (Middle) - 买卖方信息
-        // ============================================
-        else if (cy >= Y_TOP_LIMIT && cy <= Y_BOTTOM_START) {
-            // 左侧 = 购买方
+        // --- B. 主体信息 (Body) ---
+        else if (cy >= Y_HEADER && cy <= Y_FOOTER) {
+            // B1. 左侧 = 购买方
             if (cx < X_CENTER) {
-                if (/^名称[:：]/.test(cleanText)) {
-                    const name = rawText.replace(/名称\s*[:：]\s*/, '').trim();
-                    if (name.length > 2 && !result.buyerName) result.buyerName = name;
+                if (/名称/.test(cleanText)) {
+                    // 提取冒号后的内容
+                    const name = rawText.replace(/.*名称[:：\s]*/, '');
+                    if (name.length > 4 && !result.buyerName) result.buyerName = name;
                 }
-            } 
-            // 右侧 = 销售方
+            }
+            // B2. 右侧 = 销售方
             else {
-                if (/^名称[:：]/.test(cleanText)) {
-                    const name = rawText.replace(/名称\s*[:：]\s*/, '').trim();
-                    if (name.length > 2 && !result.sellerName) result.sellerName = name;
+                if (/名称/.test(cleanText)) {
+                    const name = rawText.replace(/.*名称[:：\s]*/, '');
+                    if (name.length > 4 && !result.sellerName) result.sellerName = name;
                 }
-                // 纳税人识别号 (只在右侧找)
-                if (/(?:识别号|[A-Z0-9]{15,20})/.test(cleanText)) {
-                     const taxId = rawText.match(/[A-Z0-9]{15,20}/);
-                     if (taxId) result.sellerTaxId = taxId[0];
+                // 销售方税号 (特征：15-20位大写字母数字)
+                if (/[A-Z0-9]{15,20}/.test(cleanText) && !/名称|地址|电话|账号/.test(cleanText)) {
+                    const code = cleanText.match(/[A-Z0-9]{15,20}/);
+                    if (code) result.sellerTaxId = code[0];
                 }
             }
         }
 
-        // ============================================
-        // 区域 C: 底部 (Bottom) - 金额
-        // ============================================
-        else {
-            // 价税合计
-            if (/(?:小写|合计)/.test(cleanText)) {
-                const m = rawText.match(/[￥¥]?\s*(\d+\.\d{2})/);
-                if (m) result.totalAmount = m[1];
-            }
-            // 税额 (底部汇总税额)
-            if (/税额/.test(cleanText) && !/合计/.test(cleanText)) { // 避开"价税合计"行
-                 const m = rawText.match(/[￥¥]?\s*(\d+\.\d{2})/);
-                 if (m) result.taxAmount = m[1];
-            }
+        // --- C. 全局扫描金额 ---
+        // 提取形如 123.00, ¥123.00 的数字
+        const moneyMatches = rawText.match(/([1-9]\d*\.\d{2})/g);
+        if (moneyMatches) {
+            moneyMatches.forEach(m => moneyCandidates.push(parseFloat(m)));
         }
     });
+
+    // 4. 业务规则处理：金额逻辑清洗
+    // 规则：价税合计(最大) > 金额(中间) > 税额(最小)
+    if (moneyCandidates.length > 0) {
+        // 去重并降序排列 (大到小)
+        const sortedMoney = [...new Set(moneyCandidates)].sort((a, b) => b - a);
+        
+        // 最大的必然是总价
+        result.totalAmount = sortedMoney[0].toFixed(2);
+
+        // 如果只有两个数（总价、金额），通常发票不含税额显示或识别漏了
+        // 如果有三个及以上不同数值，通常是 [总价, 金额, 税额]
+        if (sortedMoney.length >= 2) {
+            result.amount = sortedMoney[1].toFixed(2); // 第二大的是不含税金额
+        }
+        if (sortedMoney.length >= 3) {
+            // 剩下的里面找非零的最小数作为税额
+            // 往往税额是最小的那个
+            const taxes = sortedMoney.filter(v => v < sortedMoney[1]);
+            if (taxes.length > 0) {
+                result.taxAmount = taxes[0].toFixed(2);
+            }
+        }
+    }
+
+    // 5. 兜底检查 (如果 BBox 没抓到销售方，尝试全文正则)
+    if (!result.sellerName) {
+        // 找包含“公司”且在右侧的行太难，这里简单兜底
+        const fallback = ocrData.text.match(/销售方.*?名称[:：\s]*([\u4e00-\u9fa5()（）]{4,})/);
+        if (fallback) result.sellerName = fallback[1];
+    }
 
     return result;
 }
     </script>
 </body>
 </html>
+
 
 
 
