@@ -445,7 +445,27 @@ function startExport(ext) {
  * 优化版发票解析函数 - 基于关键词锚点与业务规则约束
  * 策略：OCR纠错 -> 状态机定位 -> 强规则清洗
  */
-function parseInvoice(ocrData) {
+/**
+ * 高级发票文本解析引擎
+ * 基于：关键词锚点 + 行扫描 + 业务规则约束
+ * @param {string} text - OCR 识别出的原始文本
+ */
+function parseInvoiceText(text) {
+    if (!text) return {};
+
+    // --- 1. OCR 纠错预处理 (必须先执行) ---
+    // 替换常见识别错误，统一标点
+    let cleanText = text
+        .replace(/名你/g, "名称")
+        .replace(/价锐/g, "价税")
+        .replace(/税预/g, "税额")
+        .replace(/：/g, ":") // 统一冒号
+        .replace(/\s*:\s*/g, ":"); // 去除冒号周围空格
+
+    // 按行分割，用于上下文扫描
+    const lines = cleanText.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+
+    // 初始化结果对象
     const result = {
         invoiceDate: '',
         buyerName: '',
@@ -456,148 +476,105 @@ function parseInvoice(ocrData) {
         taxBureau: ''
     };
 
-    if (!ocrData || !ocrData.lines) return result;
+    // --- 2. 提取税务局 (全局匹配规则) ---
+    // 规则：2个以上汉字 + 税务局/税务分局
+    const bureauMatch = cleanText.match(/([\u4e00-\u9fa5]{2,}(?:税务局|税务分局))/);
+    if (bureauMatch) {
+        result.taxBureau = bureauMatch[1];
+    }
 
-    // --- 0. 全局配置与预处理 ---
+    // --- 3. 提取日期 (全局匹配) ---
+    const dateMatch = cleanText.match(/(20\d{2})年(\d{1,2})月(\d{1,2})日/);
+    if (dateMatch) {
+        result.invoiceDate = `${dateMatch[1]}年${dateMatch[2]}月${dateMatch[3]}日`;
+    }
+
+    // --- 4. 提取金额 (核心规则：最小=税额，最大=价税合计) ---
+    // 步骤：提取 -> 转数字 -> 去重 -> 排序
+    const amountRegex = /[￥¥]\s*(\d+\.\d{2})/g;
+    let amounts = [];
+    let m;
+    while ((m = amountRegex.exec(cleanText)) !== null) {
+        amounts.push(parseFloat(m[1]));
+    }
+
+    if (amounts.length > 0) {
+        // 去重并从小到大排序
+        const sortedAmounts = [...new Set(amounts)].sort((a, b) => a - b);
+        const count = sortedAmounts.length;
+
+        // 规则：最大值 = 价税合计
+        result.totalAmount = sortedAmounts[count - 1].toFixed(2);
+
+        // 规则：最小值 = 税额 (前提是至少有2个金额，且最小值不等于最大值)
+        if (count >= 2) {
+            result.taxAmount = sortedAmounts[0].toFixed(2);
+        }
+    }
+
+    // --- 5. 购买方/销售方名称提取 (锚点 + 5行扫描法) ---
     
-    // OCR 纠错字典 (解决常见识别错误)
-    const corrections = [
-        { from: /名\s*你/g, to: '名称' },
-        { from: /名\s*称/g, to: '名称' },
-        { from: /价\s*锐/g, to: '价税' },
-        { from: /税\s*预/g, to: '税额' },
-        { from: /小\s*写/g, to: '小写' },
-        { from: /合\s*计/g, to: '合计' },
-        { from: /税\s*号/g, to: '识别号' }
-    ];
+    let context = null; // 当前上下文: 'buyer' | 'seller'
+    let scanTtl = 0;    // 扫描剩余行数 (TTL)
 
-    // 状态机上下文
-    let context = 'none'; // 'buyer' | 'seller' | 'none'
+    // 定义排除词 (表格关键词)
+    const blockWords = /规格|型号|单位|数量|单价|金额|税率/;
+    // 定义销售方强制包含词
+    const sellerKeywords = /公司|集团|事务所|经营部|厂/;
 
-    // 辅助：文本清洗
-    const clean = (str) => str.replace(/\s+/g, '').replace(/[:：]/g, '');
-
-    // --- 1. 逐行扫描解析 ---
-    for (let i = 0; i < ocrData.lines.length; i++) {
-        let lineText = ocrData.lines[i].text.trim();
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
         
-        // 1.1 应用纠错字典
-        corrections.forEach(c => lineText = lineText.replace(c.from, c.to));
-        const cleanText = lineText.replace(/\s+/g, ''); // 去除空格的纯文本用于匹配
-
-        // -----------------------
-        // A. 全局无关字段提取 (日期、税务局、金额)
-        // -----------------------
-
-        // [日期] 匹配：2020年01月01日 或 2020-01-01 或 2020.01.01
-        if (!result.invoiceDate) {
-            const dateMatch = lineText.match(/(20\d{2}[-/.年]\d{1,2}[-/.月]\d{1,2}日?)/);
-            if (dateMatch) {
-                result.invoiceDate = dateMatch[1].replace(/[.-]/g, '年').replace(/(\d{4})年(\d{1,2})年(\d{1,2})/, '$1年$2月$3日');
-            }
-        }
-
-        // [税务局] 必须以税务局/分局结尾
-        if (!result.taxBureau) {
-            const bureauMatch = lineText.match(/([\u4e00-\u9fa5]{3,}(?:税务局|税务分局))/);
-            if (bureauMatch) result.taxBureau = bureauMatch[1];
-        }
-
-        // [价税合计] 语义优先：找“小写”或“价税合计”
-        if (!result.totalAmount && /(?:小写|价税合计)/.test(cleanText)) {
-            // 提取该行中的金额格式
-            const moneyMatch = lineText.match(/[￥¥]?\s*(\d+\.\d{2})/);
-            if (moneyMatch) result.totalAmount = moneyMatch[1];
-        }
-
-        // [税额] 排除“税率”和“价税合计”行
-        if (!result.taxAmount && /税额/.test(cleanText) && !/合计/.test(cleanText)) {
-            const taxMatch = lineText.match(/[￥¥]?\s*(\d+\.\d{2})/);
-            if (taxMatch) result.taxAmount = taxMatch[1];
-        }
-
-        // -----------------------
-        // B. 上下文状态机切换
-        // -----------------------
-        if (/购买方/.test(cleanText) || /买方/.test(cleanText)) {
+        // A. 设置锚点
+        if (line.includes("购买方")) {
             context = 'buyer';
-        } else if (/销售方/.test(cleanText) || /卖方/.test(cleanText)) {
+            scanTtl = 5; // 开启向下5行扫描
+            continue;
+        }
+        if (line.includes("销售方")) {
             context = 'seller';
+            scanTtl = 5; // 开启向下5行扫描
+            continue;
         }
 
-        // -----------------------
-        // C. 基于上下文的字段提取
-        // -----------------------
+        // B. 扫描逻辑
+        if (context && scanTtl > 0) {
+            scanTtl--; // 消耗一次扫描机会
 
-        // [提取名称] 匹配 "名称：" 后的内容
-        if (/名称/.test(cleanText)) {
-            // 切割冒号，获取后半部分
-            let nameCandidate = lineText.replace(/.*(?:名称|名\s*称)[:：\s]*/, '').trim();
+            // 规则：寻找包含 "名称" 的行
+            if (/名.?称/.test(line)) {
+                // 提取冒号后的内容
+                // 处理情况： "名称: XXX公司" 或 "名称XXX公司"
+                let nameVal = line.replace(/.*名.?称[:\s]*/, "").trim();
 
-            if (nameCandidate.length > 1) {
-                // ---> 购买方处理
+                // 基础清洗：去掉可能混入的 "纳税人识别号" 等后续字段
+                nameVal = nameVal.split(/\s+/)[0]; 
+
+                // 规则校验 ④：长度 4~40 字
+                if (nameVal.length < 4 || nameVal.length > 40) continue;
+
+                // 规则校验 ⑥：排除表格关键词
+                if (blockWords.test(nameVal)) continue;
+
+                // 赋值逻辑
                 if (context === 'buyer' && !result.buyerName) {
-                    // 购买方规则相对宽松，只要不是无意义字符
-                    result.buyerName = nameCandidate;
-                }
-                
-                // ---> 销售方处理 (强业务规则)
-                else if (context === 'seller' && !result.sellerName) {
-                    // 规则1：过滤表头干扰 (单价、规格、型号、数量)
-                    const isNoise = /单价|数量|规格|型号|单位|金额|税率/.test(nameCandidate);
-                    // 规则2：必须包含企业性质关键词 (个人不能开专票，通常电子发票销售方都是企业)
-                    const isCompany = /公司|集团|事务所|经营部|厂|店|商行|中心/.test(nameCandidate);
-
-                    if (!isNoise && isCompany) {
-                        result.sellerName = nameCandidate;
+                    result.buyerName = nameVal;
+                } else if (context === 'seller' && !result.sellerName) {
+                    // 规则校验 ⑤：销售方必须包含特定后缀
+                    if (sellerKeywords.test(nameVal)) {
+                        result.sellerName = nameVal;
                     }
                 }
             }
-        }
 
-        // [提取销售方税号] 
-        // 规则：在销售方区域，或行内包含"纳税人识别号"
-        // 强正则：15-20位字母数字，排除小数点(防止匹配到金额)
-        if (!result.sellerTaxId) {
-            const isTaxLine = /纳税人识别号/.test(cleanText) || context === 'seller';
-            if (isTaxLine) {
-                // 排除小数点，确保不是金额
-                if (!/\.\d{2}/.test(lineText)) {
-                    // 匹配连续的大写字母或数字，长度15-20
-                    const idMatch = lineText.match(/\b([A-Z0-9]{15,20})\b/);
-                    if (idMatch) {
-                        result.sellerTaxId = idMatch[1];
-                    }
+            // 顺便提取销售方税号 (如果上下文是 seller)
+            if (context === 'seller' && !result.sellerTaxId) {
+                // 匹配 15-20 位大写字母或数字
+                const taxIdMatch = line.match(/[A-Z0-9]{15,20}/);
+                if (taxIdMatch && !line.includes("金额")) { // 再次防止误判
+                    result.sellerTaxId = taxIdMatch[0];
                 }
             }
-        }
-    }
-
-    // --- 2. 兜底策略 (如果在上下文中没找到) ---
-
-    // 销售方名称兜底：如果上面的状态机没抓到，尝试在全文找“xx公司”且紧跟“销售方”字样的行
-    if (!result.sellerName) {
-        ocrData.lines.forEach(l => {
-            if (/销售方/.test(l.text) && /公司|集团/.test(l.text)) {
-                const m = l.text.match(/[:：\s]*([\u4e00-\u9fa5()（）]{2,}公司.*)/);
-                if (m) result.sellerName = m[1];
-            }
-        });
-    }
-
-    // 金额兜底：如果没抓到“小写”，则抓取全文最大金额
-    if (!result.totalAmount) {
-        const allMoney = [];
-        const regex = /[￥¥]?\s*(\d+\.\d{2})/g;
-        ocrData.lines.forEach(l => {
-            let m;
-            while ((m = regex.exec(l.text)) !== null) {
-                allMoney.push(parseFloat(m[1]));
-            }
-        });
-        if (allMoney.length > 0) {
-            // 排序取最大值作为价税合计
-            result.totalAmount = Math.max(...allMoney).toFixed(2);
         }
     }
 
@@ -606,6 +583,7 @@ function parseInvoice(ocrData) {
     </script>
 </body>
 </html>
+
 
 
 
