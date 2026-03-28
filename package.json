@@ -1,0 +1,20 @@
+{
+  "name": "privacy-invoice-agent",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^8.0.1"
+  },
+  "dependencies": {
+    "@paddlejs-models/ocr": "^1.2.4",
+    "@paddlejs/paddlejs-backend-wasm": "^1.0.3",
+    "@paddlejs/paddlejs-backend-webgl": "^1.2.9",
+    "@paddlejs/paddlejs-core": "^2.2.0"
+  }
+}

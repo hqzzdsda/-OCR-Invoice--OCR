@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Privacy Invoice Agent | 批量工作台</title>
+  
+  <script>
+    window.global = window;
+    window.Module = window.Module || {};
+    window.process = { env: { NODE_ENV: 'development' } };
+    window.Buffer = window.Buffer || Uint8Array;
+  </script>
+
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 0; background: #f1f5f9; color: #334155; height: 100vh; display: flex; flex-direction: column; }
+    
+    /* 顶部导航栏 */
+    .header { background: #0f172a; color: white; padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 10; }
+    .header h2 { margin: 0; font-size: 1.2rem; display: flex; align-items: center; gap: 10px; }
+    #status-badge { background: #3b82f6; padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: bold; }
+
+    /* 主体左右布局 */
+    .main-container { display: flex; flex: 1; overflow: hidden; }
+    
+    /* 左侧：文件列队与预览 */
+    .left-panel { width: 45%; background: #ffffff; border-right: 1px solid #e2e8f0; display: flex; flex-direction: column; padding: 20px; overflow-y: auto; }
+    .upload-area { border: 2px dashed #cbd5e1; border-radius: 12px; padding: 30px; text-align: center; background: #f8fafc; cursor: pointer; transition: all 0.2s; }
+    .upload-area:hover { border-color: #3b82f6; background: #eff6ff; }
+    .upload-btn { display: inline-block; background: #3b82f6; color: white; padding: 10px 20px; border-radius: 8px; font-weight: bold; margin-bottom: 10px; }
+    input[type="file"] { display: none; }
+    #preview-container { margin-top: 20px; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background: #f8fafc; min-height: 300px; }
+    #preview { max-width: 100%; max-height: 100%; object-fit: contain; display: none; }
+    #file-list { margin-top: 15px; font-size: 13px; color: #64748b; }
+
+    /* 右侧：结果独立显示与控制 */
+    .right-panel { width: 55%; padding: 20px 30px; overflow-y: auto; background: #f8fafc; }
+    .action-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .export-btn { background: #10b981; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: bold; cursor: pointer; opacity: 0.5; transition: all 0.2s; }
+    .export-btn:hover:not(:disabled) { background: #059669; transform: translateY(-1px); }
+    
+    /* 独立字段卡片网格 */
+    .fields-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; }
+    .field-card { background: white; padding: 15px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); border: 1px solid #e2e8f0; }
+    .field-label { font-size: 12px; color: #64748b; margin-bottom: 5px; font-weight: bold; }
+    .field-value { width: 100%; border: none; font-size: 15px; color: #0f172a; font-family: monospace; background: transparent; outline: none; }
+    .field-value:focus { border-bottom: 2px solid #3b82f6; }
+    
+    /* 进度条 */
+    .progress-box { margin-bottom: 20px; display: none; }
+    .progress-bar { height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden; }
+    .progress-fill { height: 100%; background: #3b82f6; width: 0%; transition: width 0.3s; }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <h2>🛡️ Privacy Invoice Agent</h2>
+    <div id="status-badge">⏳ 引擎加载中...</div>
+  </div>
+
+  <div class="main-container">
+    <div class="left-panel">
+      <label class="upload-area" id="upload-label" style="opacity: 0.5; cursor: not-allowed;">
+        <div class="upload-btn">批量选择发票</div>
+        <div style="font-size: 13px; color: #94a3b8;">支持多选，本地排队处理，断网可用</div>
+        <input type="file" id="upload" accept="image/png, image/jpeg, image/webp" multiple disabled />
+      </label>
+      
+      <div id="file-list"></div>
+
+      <div id="preview-container">
+        <span id="preview-placeholder" style="color: #cbd5e1;">发票预览区</span>
+        <img id="preview" alt="发票预览" />
+      </div>
+    </div>
+
+    <div class="right-panel">
+      <div class="action-bar">
+        <h3 style="margin: 0;">✨ 识别结果核对</h3>
+        <button id="export-btn" class="export-btn" disabled>📥 导出 Excel 表格</button>
+      </div>
+      
+      <div class="progress-box" id="progress-box">
+        <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 5px;">
+          <span id="progress-text">正在处理...</span>
+        </div>
+        <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+      </div>
+
+      <div class="fields-grid" id="fields-container">
+        </div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
